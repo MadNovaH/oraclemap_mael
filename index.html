@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carte Interactive avec Points Configurables et Zoom Centré sur la Souris</title>
+    <style>
+        :root {
+            --background-color: #333;
+            --icon-hover-scale: 1.2;
+            --icon-hover-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+            --cursor-grab: grab;
+            --cursor-grabbing: grabbing;
+        }
+
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: var(--background-color);
+            overflow: hidden;
+            position: relative; /* Nécessaire pour le positionnement absolu des éléments */
+            font-family: Arial, sans-serif;
+        }
+
+        .map-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: var(--cursor-grab);
+            overflow: hidden;
+            z-index: 1; /* Positionne la carte en dessous des icônes */
+        }
+
+        .map-inner {
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform-origin: top left; /* Changer l'origine du transform pour faciliter les calculs */
+            width: 2117px; /* Largeur de l'image de la carte */
+            height: 2117px; /* Hauteur de l'image de la carte */
+            will-change: transform;
+        }
+
+        .map-inner img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            user-select: none;
+            pointer-events: none; /* Empêche l'interaction avec l'image de la carte */
+        }
+
+        /* Style des icônes avec images personnalisées */
+        .icon {
+            position: absolute;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            border: none;
+            cursor: pointer;
+            transform: translate(-50%, -50%);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            will-change: transform;
+        }
+
+        .icon:hover {
+            transform: translate(-50%, -50%) scale(var(--icon-hover-scale));
+            box-shadow: var(--icon-hover-shadow);
+        }
+    </style>
+</head>
+<body>
+    <div class="map-container" id="mapContainer">
+        <div class="map-inner" id="mapInner">
+            <!-- Image de la carte de base -->
+            <img src="map.png" alt="Carte Interactive" id="mapImage">
+            <!-- Les icônes seront ajoutées dynamiquement ici -->
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Configuration des points/boutons
+         * Chaque objet représente un point avec ses propriétés.
+         */
+        const pointsConfig = [
+            {
+                top: 1085 + 35, // Position en pixels par rapport au haut de la carte
+                left: 1555 + 60, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/basilic.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g32202dc3494_1_912', // URL de redirection
+                alt: 'Basilic', // Texte alternatif pour l'accessibilité
+                width: 115, // Largeur de l'icône en pixels
+                height: 61 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 1252 + 35, // Position en pixels par rapport au haut de la carte
+                left: 680 + 60, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/loup.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g3220674bb62_0_0', // URL de redirection
+                alt: 'Loup', // Texte alternatif pour l'accessibilité
+                width: 102/1.5, // Largeur de l'icône en pixels
+                height: 60/1.5 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 1296 + 20, // Position en pixels par rapport au haut de la carte
+                left: 864 + 20, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/loup.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g3220674bb62_0_0', // URL de redirection
+                alt: 'Loup', // Texte alternatif pour l'accessibilité
+                width: 102/1.5, // Largeur de l'icône en pixels
+                height: 60/1.5 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 1155 + 35, // Position en pixels par rapport au haut de la carte
+                left: 1080 + 60, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/loup.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g3220674bb62_0_0', // URL de redirection
+                alt: 'Loup', // Texte alternatif pour l'accessibilité
+                width: 102/1.5, // Largeur de l'icône en pixels
+                height: 60/1.5 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 1235 + 35, // Position en pixels par rapport au haut de la carte
+                left: 887 + 20, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/ours.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g3220674bb62_0_0', // URL de redirection
+                alt: 'Ours', // Texte alternatif pour l'accessibilité
+                width: 102/1.5, // Largeur de l'icône en pixels
+                height: 60/1.5 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 1463 + 35, // Position en pixels par rapport au haut de la carte
+                left: 747 + 20, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/abeille.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g3220674bb62_0_8', // URL de redirection
+                alt: 'Abeille', // Texte alternatif pour l'accessibilité
+                width: 59, // Largeur de l'icône en pixels
+                height: 59 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 1516 + 35, // Position en pixels par rapport au haut de la carte
+                left: 673 + 35, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/queen b.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g3220674bb62_0_16', // URL de redirection
+                alt: 'Queen B', // Texte alternatif pour l'accessibilité
+                width: 88, // Largeur de l'icône en pixels
+                height: 88 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 1478 + 35, // Position en pixels par rapport au haut de la carte
+                left: 878 + 35, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/sanglier.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g3220674bb62_0_25', // URL de redirection
+                alt: 'Sanglier', // Texte alternatif pour l'accessibilité
+                width: 64, // Largeur de l'icône en pixels
+                height: 46 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 1420 + 35, // Position en pixels par rapport au haut de la carte
+                left: 894 + 35, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/princesse.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g3220674bb62_0_25', // URL de redirection
+                alt: 'Princesse', // Texte alternatif pour l'accessibilité
+                width: 76, // Largeur de l'icône en pixels
+                height: 54 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 1306 + 35, // Position en pixels par rapport au haut de la carte
+                left: 1299 + 35, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/golem.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g32202dc3494_1_903', // URL de redirection
+                alt: 'Golem', // Texte alternatif pour l'accessibilité
+                width: 75, // Largeur de l'icône en pixels
+                height: 75 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 1308 + 35, // Position en pixels par rapport au haut de la carte
+                left: 1530 + 35, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/golem.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g32202dc3494_1_903', // URL de redirection
+                alt: 'Golem', // Texte alternatif pour l'accessibilité
+                width: 75, // Largeur de l'icône en pixels
+                height: 75 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 1254 + 35, // Position en pixels par rapport au haut de la carte
+                left: 1735 + 35, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/gnoll.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g32202dc3494_1_919', // URL de redirection
+                alt: 'Gnoll', // Texte alternatif pour l'accessibilité
+                width: 61, // Largeur de l'icône en pixels
+                height: 71 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 1076 + 35, // Position en pixels par rapport au haut de la carte
+                left: 1812 + 35, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/kobold.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g32202dc3494_1_888', // URL de redirection
+                alt: 'Kobold', // Texte alternatif pour l'accessibilité
+                width: 58, // Largeur de l'icône en pixels
+                height: 79 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 661 + 50, // Position en pixels par rapport au haut de la carte
+                left: 1166 + 50, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/gorille.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g32202dc3494_0_411', // URL de redirection
+                alt: 'Gorille', // Texte alternatif pour l'accessibilité
+                width: 116, // Largeur de l'icône en pixels
+                height: 100 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 864 + 50, // Position en pixels par rapport au haut de la carte
+                left: 1349 + 50, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/araigne.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g32202dc3494_1_827', // URL de redirection
+                alt: 'Araignée', // Texte alternatif pour l'accessibilité
+                width: 95, // Largeur de l'icône en pixels
+                height: 93 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 853 + 50, // Position en pixels par rapport au haut de la carte
+                left: 1464 + 50, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/ogre.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g32202dc3494_1_1', // URL de redirection
+                alt: 'Ogre', // Texte alternatif pour l'accessibilité
+                width: 90, // Largeur de l'icône en pixels
+                height: 104 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 277 + 50, // Position en pixels par rapport au haut de la carte
+                left: 1138 + 50, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/murloc.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g32202dc3494_1_836', // URL de redirection
+                alt: 'Murloc', // Texte alternatif pour l'accessibilité
+                width: 132, // Largeur de l'icône en pixels
+                height: 148 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 275 + 50, // Position en pixels par rapport au haut de la carte
+                left: 1551 + 50, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/centaur.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g32202dc3494_1_844', // URL de redirection
+                alt: 'Centaur', // Texte alternatif pour l'accessibilité
+                width: 99, // Largeur de l'icône en pixels
+                height: 126 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 719 + 50, // Position en pixels par rapport au haut de la carte
+                left: 1786 + 50, // Position en pixels par rapport à la gauche de la carte
+                img: 'icons/raptor.png', // Chemin vers l'image de l'icône
+                link: 'https://docs.google.com/presentation/d/1bEh9Cyx-sQam43NYb9cDkQr_Pv7SzBgQJvFgCm9SEAs/edit#slide=id.g32202dc3494_1_879', // URL de redirection
+                alt: 'Raptor', // Texte alternatif pour l'accessibilité
+                width: 167, // Largeur de l'icône en pixels
+                height: 63 // Hauteur de l'icône en pixels
+            },
+            {
+                top: 1480,
+                left: 640,
+                img: 'icons/animal3.png',
+                link: 'https://example.com/monster3',
+                alt: 'Monstre 3',
+                width: 40,
+                height: 40
+            }
+            // Ajoutez autant de points que nécessaire
+        ];
+
+        /**
+         * Fonction pour créer et ajouter les icônes à la carte
+         * @param {Array} config - Tableau de configuration des points
+         */
+        function createIcons(config) {
+            const mapInner = document.getElementById('mapInner');
+            config.forEach(point => {
+                const icon = document.createElement('div');
+                icon.classList.add('icon');
+                icon.style.top = `${point.top}px`;
+                icon.style.left = `${point.left}px`;
+                icon.style.backgroundImage = `url('${point.img}')`;
+                icon.style.width = `${point.width}px`;
+                icon.style.height = `${point.height}px`;
+                icon.title = point.alt; // Tooltip au survol
+                icon.setAttribute('aria-label', point.alt); // Accessibilité
+
+                // Ajout de l'événement de clic avec vérification de l'état de dragging
+                icon.addEventListener('click', (e) => {
+                    if (!isDragging) {
+                        window.location.href = point.link;
+                    }
+                });
+
+                mapInner.appendChild(icon);
+            });
+        }
+
+        // Appel de la fonction pour créer les icônes
+        createIcons(pointsConfig);
+
+        /**
+         * Drapeau global pour indiquer si un déplacement est en cours
+         */
+        let isDragging = false;
+
+        /**
+         * Classe pour gérer le zoom et le déplacement de la carte
+         */
+        class MapController {
+            constructor(container, inner) {
+                this.container = container;
+                this.inner = inner;
+                this.scale = 1;
+                this.scaleMin = 1;
+                this.scaleMax = 3;
+                this.translateX = 0;
+                this.translateY = 0;
+                this.isDraggingInternal = false;
+                this.startX = 0;
+                this.startY = 0;
+                this.threshold = 5; // Seuil de déplacement pour considérer comme un drag
+
+                // Animation state
+                this.targetScale = this.scale;
+                this.targetTranslateX = this.translateX;
+                this.targetTranslateY = this.translateY;
+                this.animationFrame = null;
+
+                // Bind methods
+                this.onWheel = this.onWheel.bind(this);
+                this.onMouseDown = this.onMouseDown.bind(this);
+                this.onMouseMove = this.onMouseMove.bind(this);
+                this.onMouseUp = this.onMouseUp.bind(this);
+                this.animate = this.animate.bind(this);
+
+                // Add event listeners
+                this.container.addEventListener('wheel', this.onWheel, { passive: false });
+                this.container.addEventListener('mousedown', this.onMouseDown);
+                window.addEventListener('mousemove', this.onMouseMove);
+                window.addEventListener('mouseup', this.onMouseUp);
+
+                // Prevent default drag and select behaviors
+                document.getElementById('mapImage').addEventListener('dragstart', (e) => e.preventDefault());
+                this.container.addEventListener('selectstart', (e) => e.preventDefault());
+
+                // Set initial cursor
+                this.container.style.cursor = 'grab';
+
+                // Start animation loop
+                this.animate();
+            }
+
+            /**
+             * Gestion du zoom avec la molette
+             * @param {WheelEvent} event 
+             */
+            onWheel(event) {
+                event.preventDefault();
+                const delta = Math.sign(event.deltaY) * -0.1;
+                let newScale = this.targetScale + delta;
+                newScale = Math.min(Math.max(newScale, this.scaleMin), this.scaleMax);
+
+                // Position de la souris relative à la carte
+                const rect = this.container.getBoundingClientRect();
+                const mouseX = event.clientX - rect.left;
+                const mouseY = event.clientY - rect.top;
+
+                // Calcul des nouvelles traductions pour centrer le zoom sur la souris
+                const scaleRatio = newScale / this.targetScale;
+                const newTranslateX = (this.targetTranslateX - mouseX) * scaleRatio + mouseX;
+                const newTranslateY = (this.targetTranslateY - mouseY) * scaleRatio + mouseY;
+
+                // Mettre à jour les cibles
+                this.targetScale = newScale;
+                this.targetTranslateX = newTranslateX;
+                this.targetTranslateY = newTranslateY;
+            }
+
+            /**
+             * Gestion du début du déplacement de la carte
+             * @param {MouseEvent} event 
+             */
+            onMouseDown(event) {
+                event.preventDefault();
+                this.isDraggingInternal = false;
+                isDragging = false; // Réinitialiser le drapeau global
+                this.startX = event.clientX - this.targetTranslateX;
+                this.startY = event.clientY - this.targetTranslateY;
+                this.container.style.cursor = 'grabbing';
+            }
+
+            /**
+             * Gestion du déplacement de la carte
+             * @param {MouseEvent} event 
+             */
+            onMouseMove(event) {
+                if (event.buttons !== 1) { // Vérifie si le bouton gauche de la souris est enfoncé
+                    this.isDraggingInternal = false;
+                    return;
+                }
+
+                const currentX = event.clientX - this.startX;
+                const currentY = event.clientY - this.startY;
+
+                const deltaX = currentX - this.targetTranslateX;
+                const deltaY = currentY - this.targetTranslateY;
+
+                if (!this.isDraggingInternal) {
+                    if (Math.sqrt(deltaX * deltaX + deltaY * deltaY) > this.threshold) {
+                        this.isDraggingInternal = true;
+                        isDragging = true; // Mettre à jour le drapeau global
+                    }
+                }
+
+                if (this.isDraggingInternal) {
+                    this.targetTranslateX = currentX;
+                    this.targetTranslateY = currentY;
+                }
+            }
+
+            /**
+             * Gestion de la fin du déplacement de la carte
+             */
+            onMouseUp() {
+                if (this.isDraggingInternal) {
+                    // Fin du déplacement
+                }
+                this.isDraggingInternal = false;
+                isDragging = false; // Réinitialiser le drapeau global
+                this.container.style.cursor = 'grab';
+            }
+
+            /**
+             * Boucle d'animation pour des transitions fluides
+             */
+            animate() {
+                // Facteur d'assouplissement pour une interpolation douce
+                const easing = 0.1;
+
+                // Interpoler les valeurs actuelles vers les valeurs cibles
+                this.scale += (this.targetScale - this.scale) * easing;
+                this.translateX += (this.targetTranslateX - this.translateX) * easing;
+                this.translateY += (this.targetTranslateY - this.translateY) * easing;
+
+                // Appliquer la transformation
+                this.inner.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
+
+                // Continuer la boucle d'animation
+                this.animationFrame = requestAnimationFrame(this.animate);
+            }
+        }
+
+        // Initialiser le contrôleur de la carte
+        const mapContainer = document.getElementById('mapContainer');
+        const mapInner = document.getElementById('mapInner');
+        new MapController(mapContainer, mapInner);
+    </script>
+</body>
+</html>
